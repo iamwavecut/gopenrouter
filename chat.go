@@ -19,7 +19,7 @@ type ChatCompletionMessageRole string
 // ChatCompletionRequest is a request to create a chat completion.
 type ChatCompletionRequest struct {
 	Model             string                  `json:"model"`
-	Messages          []ChatCompletionMessage `json:"messages"`
+	Messages          []ChatCompletionMessage `json:"messages,omitempty"`
 	Temperature       float64                 `json:"temperature,omitempty"`
 	TopP              float64                 `json:"top_p,omitempty"`
 	N                 int                     `json:"n,omitempty"`
@@ -104,32 +104,27 @@ type ChatCompletionMessage struct {
 
 // MarshalJSON handles marshalling the Content or MultiContent field.
 func (m *ChatCompletionMessage) MarshalJSON() ([]byte, error) {
-	type alias struct {
-		Role       ChatCompletionMessageRole `json:"role"`
-		Name       string                    `json:"name,omitempty"`
-		ToolCalls  []ToolCall                `json:"tool_calls,omitempty"`
-		ToolCallID string                    `json:"tool_call_id,omitempty"`
+	data := map[string]any{
+		"role": m.Role,
 	}
 
 	if len(m.MultiContent) > 0 {
-		// If MultiContent is present, marshal it as 'content' and omit the original string content
-		return json.Marshal(&struct {
-			alias
-			Content []ChatCompletionMessagePart `json:"content"`
-		}{
-			alias: alias{
-				Role:       m.Role,
-				Name:       m.Name,
-				ToolCalls:  m.ToolCalls,
-				ToolCallID: m.ToolCallID,
-			},
-			Content: m.MultiContent,
-		})
+		data["content"] = m.MultiContent
+	} else if m.Content != "" {
+		data["content"] = m.Content
 	}
 
-	// Otherwise, use the default marshalling which includes the string 'Content'
-	type defaultAlias ChatCompletionMessage
-	return json.Marshal((*defaultAlias)(m))
+	if m.Name != "" {
+		data["name"] = m.Name
+	}
+	if len(m.ToolCalls) > 0 {
+		data["tool_calls"] = m.ToolCalls
+	}
+	if m.ToolCallID != "" {
+		data["tool_call_id"] = m.ToolCallID
+	}
+
+	return json.Marshal(data)
 }
 
 // ChatCompletionMessagePart is a part of a multi-part message.
