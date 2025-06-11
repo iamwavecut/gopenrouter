@@ -42,12 +42,12 @@ type ChatCompletionRequest struct {
 	Prediction        *Prediction             `json:"prediction,omitempty"`
 
 	// OpenRouter-specific fields
-	Models      []string         `json:"models,omitempty"`
-	Route       string           `json:"route,omitempty"`
-	Transforms  []string         `json:"transforms,omitempty"`
-	Reasoning   *ReasoningParams `json:"reasoning,omitempty"`
-	UsageParams *UsageParams     `json:"usage,omitempty"`
-	ExtraBody   map[string]any   `json:"-"`
+	Models     []string         `json:"models,omitempty"`
+	Route      string           `json:"route,omitempty"`
+	Transforms []string         `json:"transforms,omitempty"`
+	Reasoning  *ReasoningParams `json:"reasoning,omitempty"`
+	Usage      *UsageParams     `json:"usage,omitempty"`
+	ExtraBody  map[string]any   `json:"-"`
 }
 
 // chatCompletionRequest is an alias for ChatCompletionRequest to avoid recursion in MarshalJSON.
@@ -134,10 +134,16 @@ func (m *ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 
 // ChatCompletionMessagePart is a part of a multi-part message.
 type ChatCompletionMessagePart struct {
-	Type     string    `json:"type"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *ImageURL `json:"image_url,omitempty"`
-	File     *File     `json:"file,omitempty"` // OpenRouter specific
+	Type         string        `json:"type"`
+	Text         string        `json:"text,omitempty"`
+	ImageURL     *ImageURL     `json:"image_url,omitempty"`
+	File         *File         `json:"file,omitempty"` // OpenRouter specific
+	CacheControl *CacheControl `json:"cache_control,omitempty"`
+}
+
+// CacheControl is for controlling caching of message parts.
+type CacheControl struct {
+	Type string `json:"type"` // e.g. "ephemeral"
 }
 
 // ImageURL is the URL of an image.
