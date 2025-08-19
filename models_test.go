@@ -72,3 +72,25 @@ func TestListModels_APIError(t *testing.T) {
 		t.Errorf("expected error message %q, got %q", errorMsg, apiErr.Message)
 	}
 }
+
+func TestPlugins_Marshal(t *testing.T) {
+	req := ChatCompletionRequest{
+		Model: "test-model",
+		Plugins: []Plugin{
+			{ID: PluginIDWeb, Config: WebSearchOptions{SearchContextSize: SearchContextSizeHigh}},
+			{ID: PluginIDFileParser, Config: FileParserConfig{PDF: &PDFPlugin{Engine: string(PDFEnginePDFText)}}},
+		},
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	plugins, ok := m["plugins"].([]any)
+	if !ok || len(plugins) != 2 {
+		t.Fatalf("expected 2 plugins, got: %v", m["plugins"])
+	}
+}

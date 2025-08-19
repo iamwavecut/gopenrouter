@@ -189,3 +189,118 @@ func TestCreateChatCompletion_APIError(t *testing.T) {
 		t.Errorf("expected error message %q, got %q", errorMsg, apiErr.Message)
 	}
 }
+
+func TestChatCompletionMessage_ToolCallsMarshal(t *testing.T) {
+	msg := &ChatCompletionMessage{
+		Role: RoleAssistant,
+		ToolCalls: []ToolCall{
+			{
+				ID:   "call_abc123",
+				Type: "function",
+				Function: Function{
+					Name:      "search_gutenberg_books",
+					Arguments: `{"search_terms":["James","Joyce"]}`,
+				},
+			},
+		},
+	}
+
+	b, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("failed to unmarshal json: %v", err)
+	}
+
+	tc, ok := m["tool_calls"].([]any)
+	if !ok || len(tc) != 1 {
+		t.Fatalf("expected one tool_call, got: %v", m["tool_calls"])
+	}
+	call := tc[0].(map[string]any)
+	if call["id"] != "call_abc123" {
+		t.Errorf("unexpected tool_call.id: %v", call["id"])
+	}
+	if call["type"] != "function" {
+		t.Errorf("unexpected tool_call.type: %v", call["type"])
+	}
+	fn := call["function"].(map[string]any)
+	if fn["name"] != "search_gutenberg_books" {
+		t.Errorf("unexpected function.name: %v", fn["name"])
+	}
+	if fn["arguments"] != `{"search_terms":["James","Joyce"]}` {
+		t.Errorf("unexpected function.arguments: %v", fn["arguments"])
+	}
+}
+
+func TestChatCompletionRequest_ParallelToolCalls_Marshal(t *testing.T) {
+	parallel := false
+	req := ChatCompletionRequest{
+		Model:             "test-model",
+		ParallelToolCalls: &parallel,
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if v, ok := m["parallel_tool_calls"].(bool); !ok || v != false {
+		t.Errorf("expected parallel_tool_calls=false, got: %v", m["parallel_tool_calls"])
+	}
+}
+
+func TestChatCompletionRequest_Logprobs_Marshal(t *testing.T) {
+	lp := true
+	top := 5
+	req := ChatCompletionRequest{
+		Model:       "test-model",
+		LogProbs:    &lp,
+		TopLogProbs: &top,
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if v, ok := m["logprobs"].(bool); !ok || v != true {
+		t.Errorf("expected logprobs=true, got: %v", m["logprobs"])
+	}
+	if v, ok := m["top_logprobs"].(float64); !ok || int(v) != 5 {
+		t.Errorf("expected top_logprobs=5, got: %v", m["top_logprobs"])
+	}
+}
+
+func TestCreateChatCompletion_NonJSONError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprint(w, "oops plain text")
+	}))
+	defer server.Close()
+
+	config := DefaultConfig("test-token")
+	config.BaseURL = server.URL
+	client := NewClientWithConfig(config)
+
+	_, err := client.CreateChatCompletion(context.Background(), ChatCompletionRequest{Model: "test"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	reqErr, ok := err.(*RequestError)
+	if !ok {
+		t.Fatalf("expected RequestError, got %T", err)
+	}
+	if reqErr.HTTPStatusCode != http.StatusInternalServerError {
+		t.Errorf("expected HTTPStatusCode=%d, got %d", http.StatusInternalServerError, reqErr.HTTPStatusCode)
+	}
+	if reqErr.HTTPStatus == "" {
+		t.Errorf("expected HTTPStatus to be set")
+	}
+}

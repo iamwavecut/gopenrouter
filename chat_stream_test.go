@@ -124,3 +124,50 @@ func TestChatCompletionStream_Recv(t *testing.T) {
 		t.Errorf("Expected io.EOF, got %v", err)
 	}
 }
+
+func TestCreateChatCompletionStream_IncludeUsageRequested(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+		// ensure stream_options.include_usage is present when set by caller
+		so, ok := reqBody["stream_options"].(map[string]any)
+		if !ok || so["include_usage"] != true {
+			t.Errorf("expected stream_options.include_usage=true, got: %v", reqBody["stream_options"])
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: {}\n\n"))
+	}))
+	defer server.Close()
+
+	config := DefaultConfig("test-token")
+	config.BaseURL = server.URL
+	client := NewClientWithConfig(config)
+
+	req := ChatCompletionRequest{Model: "test", StreamOptions: &StreamOptions{IncludeUsage: true}}
+	_, err := client.CreateChatCompletionStream(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestStreamLogprobsDelta_Unmarshal(t *testing.T) {
+	chunk := ChatCompletionStreamResponse{
+		ID: "1",
+		Choices: []ChatCompletionStreamChoice{
+			{
+				Index: 0,
+				Logprobs: &ChatCompletionStreamChoiceLogprobs{
+					Content: []ChatCompletionStreamChoiceDelta{{Token: "Hello", LogProb: -0.1}},
+				},
+			},
+		},
+	}
+	b, _ := json.Marshal(chunk)
+	var got ChatCompletionStreamResponse
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if got.Choices[0].Logprobs == nil || len(got.Choices[0].Logprobs.Content) != 1 {
+		t.Fatalf("expected one logprobs content delta, got: %+v", got.Choices[0].Logprobs)
+	}
+}

@@ -24,6 +24,7 @@ type ChatCompletionRequest struct {
 	TopP              float64                 `json:"top_p,omitempty"`
 	N                 int                     `json:"n,omitempty"`
 	Stream            bool                    `json:"stream,omitempty"`
+	StreamOptions     *StreamOptions          `json:"stream_options,omitempty"`
 	Stop              []string                `json:"stop,omitempty"`
 	MaxTokens         int                     `json:"max_tokens,omitempty"`
 	PresencePenalty   float64                 `json:"presence_penalty,omitempty"`
@@ -33,6 +34,7 @@ type ChatCompletionRequest struct {
 	Seed              *int                    `json:"seed,omitempty"`
 	Tools             []Tool                  `json:"tools,omitempty"`
 	ToolChoice        any                     `json:"tool_choice,omitempty"`
+	LogProbs          *bool                   `json:"logprobs,omitempty"`
 	ResponseFormat    *ResponseFormat         `json:"response_format,omitempty"`
 	TopK              *float64                `json:"top_k,omitempty"`
 	RepetitionPenalty *float64                `json:"repetition_penalty,omitempty"`
@@ -48,6 +50,9 @@ type ChatCompletionRequest struct {
 	Reasoning  *ReasoningParams `json:"reasoning,omitempty"`
 	Usage      *UsageParams     `json:"usage,omitempty"`
 	ExtraBody  map[string]any   `json:"-"`
+	Plugins    []Plugin         `json:"plugins,omitempty"`
+	// Tool calling behavior
+	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
 }
 
 // chatCompletionRequest is an alias for ChatCompletionRequest to avoid recursion in MarshalJSON.
@@ -195,10 +200,11 @@ type ChatCompletionResponse struct {
 
 // Choice is a choice in a chat completion response.
 type Choice struct {
-	Index              int                   `json:"index"`
-	Message            ChatCompletionMessage `json:"message"`
-	FinishReason       string                `json:"finish_reason"`
-	NativeFinishReason string                `json:"native_finish_reason,omitempty"`
+	Index              int                           `json:"index"`
+	Message            ChatCompletionMessage         `json:"message"`
+	FinishReason       string                        `json:"finish_reason"`
+	NativeFinishReason string                        `json:"native_finish_reason,omitempty"`
+	Logprobs           *ChatCompletionChoiceLogprobs `json:"logprobs,omitempty"`
 }
 
 // Usage is the usage of the model.
@@ -215,6 +221,27 @@ type Usage struct {
 type TokensDetails struct {
 	CachedTokens    int `json:"cached_tokens,omitempty"`
 	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+}
+
+// ChatCompletionChoiceLogprobs contains token-level logprob information for non-stream responses.
+type ChatCompletionChoiceLogprobs struct {
+	Content []ChatCompletionTokenLogprob `json:"content,omitempty"`
+	Refusal []ChatCompletionTokenLogprob `json:"refusal,omitempty"`
+}
+
+// ChatCompletionTokenLogprob represents a single token and logprob details.
+type ChatCompletionTokenLogprob struct {
+	Token       string                                 `json:"token"`
+	LogProb     float64                                `json:"logprob"`
+	Bytes       []byte                                 `json:"bytes,omitempty"`
+	TopLogProbs []ChatCompletionTokenLogprobTopLogprob `json:"top_logprobs,omitempty"`
+}
+
+// ChatCompletionTokenLogprobTopLogprob represents an alternative token candidate.
+type ChatCompletionTokenLogprobTopLogprob struct {
+	Token   string  `json:"token"`
+	LogProb float64 `json:"logprob"`
+	Bytes   []byte  `json:"bytes,omitempty"`
 }
 
 // ReasoningDetail is a detail about the reasoning process.
@@ -240,6 +267,57 @@ type Prediction struct {
 	Content string `json:"content"`
 }
 
+// StreamOptions provides additional control for streaming responses.
+type StreamOptions struct {
+	// If set, an extra chunk will be sent before the [DONE] message with aggregated usage.
+	IncludeUsage bool `json:"include_usage,omitempty"`
+}
+
+// Plugin represents an OpenRouter plugin request entry (e.g., web search, file parser).
+type Plugin struct {
+	ID     PluginID `json:"id"`
+	Config any      `json:"config,omitempty"`
+}
+
+type PluginID string
+
+const (
+	PluginIDFileParser PluginID = "file-parser"
+	PluginIDWeb        PluginID = "web"
+)
+
+// PDFEngine enumerates available PDF processing engines.
+type PDFEngine string
+
+const (
+	PDFEngineMistralOCR PDFEngine = "mistral-ocr"
+	PDFEnginePDFText    PDFEngine = "pdf-text"
+	PDFEngineNative     PDFEngine = "native"
+)
+
+// PDFPlugin config for file-parser PDF processing.
+type PDFPlugin struct {
+	Engine string `json:"engine"`
+}
+
+// FileParserConfig configures the file-parser plugin.
+type FileParserConfig struct {
+	PDF *PDFPlugin `json:"pdf,omitempty"`
+}
+
+// WebSearchOptions config for the web search plugin.
+type WebSearchOptions struct {
+	SearchContextSize SearchContextSize `json:"search_context_size"`
+}
+
+type SearchContextSize string
+
+const (
+	SearchContextSizeLow    SearchContextSize = "low"
+	SearchContextSizeMedium SearchContextSize = "medium"
+	SearchContextSizeHigh   SearchContextSize = "high"
+)
+
 // CreateChatCompletion creates a chat completion.
 func (c *Client) CreateChatCompletion(ctx context.Context, r ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	if err := validateChatCompletionRequest(r); err != nil {
@@ -264,14 +342,14 @@ func (c *Client) CreateChatCompletion(ctx context.Context, r ChatCompletionReque
 	if resp.StatusCode != http.StatusOK {
 		var errResp ErrorResponse
 		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-			return nil, &RequestError{Err: fmt.Errorf("failed to decode error response: %w", err)}
+			return nil, &RequestError{HTTPStatus: resp.Status, HTTPStatusCode: resp.StatusCode, Err: fmt.Errorf("failed to decode error response: %w", err)}
 		}
 		return nil, errResp.Error
 	}
 
 	var res ChatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, &RequestError{Err: fmt.Errorf("failed to decode response: %w", err)}
+		return nil, &RequestError{HTTPStatus: resp.Status, HTTPStatusCode: resp.StatusCode, Err: fmt.Errorf("failed to decode response: %w", err)}
 	}
 
 	return &res, nil

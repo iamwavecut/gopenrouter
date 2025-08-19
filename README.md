@@ -46,6 +46,9 @@ For complete, runnable examples, please see the [`examples/`](./examples) direct
 | [Structured Outputs](./examples/structured_output)           | Enforces a specific JSON schema for model outputs, a powerful OpenRouter feature.               |
 | [Reasoning Tokens](./examples/chat_reasoning)                | Shows how to request and inspect the model's "thinking" process, unique to OpenRouter.          |
 | [Provider Extras](./examples/chat_extra_body)                | Uses the `ExtraBody` field to pass provider-specific parameters for fine-grained control.       |
+| [Tool Calling (History)](./examples/tool_call_loop)          | End-to-end tool-calling loop with full-history resend and tool result messages.                 |
+| [Logprobs](./examples/logprobs)                              | Request token logprobs and inspect per-token candidates.                                        |
+| [Streaming with Usage](./examples/stream_include_usage)      | Stream responses and receive a final usage chunk before [DONE].                                 |
 | [List Models](./examples/list_models)                        | A client utility to fetch the list of all models available on OpenRouter.                       |
 | [Check Credits](./examples/check_credits)                    | A client utility to check your API key's usage, limit, and free tier status on OpenRouter.      |
 | [Get Generation](./examples/get_generation)                  | Fetches detailed post-generation statistics, including cost and native token counts.            |
