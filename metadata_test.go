@@ -75,35 +75,69 @@ func TestListModels_APIError(t *testing.T) {
 	}
 }
 
-func TestPlugins_Marshal(t *testing.T) {
-	req := ChatCompletionRequest{
+func TestGetGeneration(t *testing.T) {
+	mockGeneration := Generation{
+		ID:    "test-id",
 		Model: "test-model",
-		Plugins: []Plugin{
-			{ID: PluginIDWeb, Config: WebSearchOptions{SearchContextSize: SearchContextSizeHigh}},
-			{ID: PluginIDFileParser, Config: FileParserConfig{PDF: &PDFPlugin{Engine: string(PDFEnginePDFText)}}},
-		},
 	}
-	b, err := json.Marshal(req)
+	mockResponse := GenerationResponse{Data: mockGeneration}
+	mockRespBody, _ := json.Marshal(mockResponse)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/generation" {
+			t.Errorf("expected path /generation, got %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("id") != "test-id" {
+			t.Errorf("expected id query param to be 'test-id', got %s", r.URL.Query().Get("id"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(mockRespBody); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	config := DefaultConfig("test-token")
+	config.BaseURL = server.URL
+	client := NewClientWithConfig(config)
+
+	generation, err := client.GetGeneration(context.Background(), "test-id")
 	if err != nil {
-		t.Fatalf("marshal error: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		t.Fatalf("unmarshal error: %v", err)
+
+	if !reflect.DeepEqual(*generation, mockGeneration) {
+		t.Errorf("response mismatch:\n- got: %+v\n- want: %+v", *generation, mockGeneration)
 	}
-	plugins, ok := m["plugins"].([]any)
-	if !ok || len(plugins) != 2 {
-		t.Fatalf("expected 2 plugins, got: %v", m["plugins"])
+}
+
+func TestGetGeneration_APIError(t *testing.T) {
+	errorMsg := "generation not found"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintf(w, `{"error": {"message": "%s"}}`, errorMsg)
+	}))
+	defer server.Close()
+
+	config := DefaultConfig("test-token")
+	config.BaseURL = server.URL
+	client := NewClientWithConfig(config)
+
+	_, err := client.GetGeneration(context.Background(), "test-id")
+	if err == nil {
+		t.Fatal("expected an error but got none")
 	}
-	webPlugin := plugins[0].(map[string]any)
-	if _, ok := webPlugin["config"]; ok {
-		t.Fatalf("expected flattened plugin payload, got nested config: %v", webPlugin)
+
+	apiErr, ok := err.(*APIError)
+	if !ok {
+		t.Fatalf("expected error of type APIError, got %T", err)
 	}
-	if webPlugin["search_context_size"] != string(SearchContextSizeHigh) {
-		t.Fatalf("expected legacy config bridge to preserve search_context_size, got %v", webPlugin["search_context_size"])
-	}
-	filePlugin := plugins[1].(map[string]any)
-	if _, ok := filePlugin["pdf"]; !ok {
-		t.Fatalf("expected file-parser pdf config at top level, got %v", filePlugin)
+
+	if apiErr.Message != errorMsg {
+		t.Errorf("expected error message %q, got %q", errorMsg, apiErr.Message)
 	}
 }

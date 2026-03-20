@@ -1,6 +1,9 @@
 package gopenrouter
 
-import managementpkg "github.com/iamwavecut/gopenrouter/management"
+import (
+	managementpkg "github.com/iamwavecut/gopenrouter/management"
+	oauthpkg "github.com/iamwavecut/gopenrouter/oauth"
+)
 
 // Deprecated: use management.ActivityParams from package github.com/iamwavecut/gopenrouter/management.
 type ActivityParams = managementpkg.ActivityParams
@@ -91,3 +94,18 @@ type KeyData = managementpkg.KeyData
 
 // Deprecated: use management.LegacyRateLimit from package github.com/iamwavecut/gopenrouter/management.
 type LegacyRateLimit = managementpkg.LegacyRateLimit
+
+// Deprecated: use oauth.CreateAuthCodeRequest from package github.com/iamwavecut/gopenrouter/oauth.
+type CreateAuthCodeRequest = oauthpkg.CreateAuthCodeRequest
+
+// Deprecated: use oauth.CreateAuthCodeResponse from package github.com/iamwavecut/gopenrouter/oauth.
+type CreateAuthCodeResponse = oauthpkg.CreateAuthCodeResponse
+
+// Deprecated: use oauth.AuthCode from package github.com/iamwavecut/gopenrouter/oauth.
+type AuthCode = oauthpkg.AuthCode
+
+// Deprecated: use oauth.ExchangeAuthCodeRequest from package github.com/iamwavecut/gopenrouter/oauth.
+type ExchangeAuthCodeRequest = oauthpkg.ExchangeAuthCodeRequest
+
+// Deprecated: use oauth.ExchangeAuthCodeResponse from package github.com/iamwavecut/gopenrouter/oauth.
+type ExchangeAuthCodeResponse = oauthpkg.ExchangeAuthCodeResponse

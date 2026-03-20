@@ -351,3 +351,36 @@ func TestValidateChatCompletionRequest_DeprecatedConflicts(t *testing.T) {
 		t.Fatal("expected conflict error for route and provider.sort.partition")
 	}
 }
+
+func TestPlugins_Marshal(t *testing.T) {
+	req := ChatCompletionRequest{
+		Model: "test-model",
+		Plugins: []Plugin{
+			{ID: PluginIDWeb, Config: WebSearchOptions{SearchContextSize: SearchContextSizeHigh}},
+			{ID: PluginIDFileParser, Config: FileParserConfig{PDF: &PDFPlugin{Engine: string(PDFEnginePDFText)}}},
+		},
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	plugins, ok := m["plugins"].([]any)
+	if !ok || len(plugins) != 2 {
+		t.Fatalf("expected 2 plugins, got: %v", m["plugins"])
+	}
+	webPlugin := plugins[0].(map[string]any)
+	if _, ok := webPlugin["config"]; ok {
+		t.Fatalf("expected flattened plugin payload, got nested config: %v", webPlugin)
+	}
+	if webPlugin["search_context_size"] != string(SearchContextSizeHigh) {
+		t.Fatalf("expected legacy config bridge to preserve search_context_size, got %v", webPlugin["search_context_size"])
+	}
+	filePlugin := plugins[1].(map[string]any)
+	if _, ok := filePlugin["pdf"]; !ok {
+		t.Fatalf("expected file-parser pdf config at top level, got %v", filePlugin)
+	}
+}
