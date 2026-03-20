@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/iamwavecut/gopenrouter"
+	"github.com/iamwavecut/gopenrouter/shared"
 )
 
 func main() {
@@ -23,13 +24,13 @@ func main() {
 				Role: gopenrouter.RoleUser,
 				MultiContent: []gopenrouter.ChatCompletionMessagePart{
 					{Type: "text", Text: "Summarize the content of the attached PDF."},
-					{Type: "file", File: &gopenrouter.File{Filename: "sample.pdf", FileData: "data:application/pdf;base64," + encodedFile}},
+					{Type: "file", File: &shared.File{Filename: "sample.pdf", FileData: "data:application/pdf;base64," + encodedFile}},
 				},
 			},
 		},
-		Plugins: []gopenrouter.Plugin{{
-			ID:     gopenrouter.PluginIDFileParser,
-			Config: gopenrouter.FileParserConfig{PDF: &gopenrouter.PDFPlugin{Engine: string(gopenrouter.PDFEnginePDFText)}},
+		Plugins: []shared.Plugin{{
+			ID:     shared.PluginIDFileParser,
+			Config: shared.FileParserConfig{PDF: &shared.PDFPlugin{Engine: string(shared.PDFEnginePDFText)}},
 		}},
 	}
 

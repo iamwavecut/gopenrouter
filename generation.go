@@ -2,56 +2,68 @@ package gopenrouter
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
+	"net/url"
 )
 
-// GenerationResponse is the top-level response from the /generation endpoint.
 type GenerationResponse struct {
 	Data Generation `json:"data"`
 }
 
-// Generation contains the detailed statistics for a single generation.
 type Generation struct {
-	ID                     string  `json:"id"`
-	Model                  string  `json:"model"`
-	CreatedAt              string  `json:"created_at"`
-	PromptTokens           int     `json:"tokens_prompt"`
-	CompletionTokens       int     `json:"tokens_completion"`
-	NativePromptTokens     int     `json:"native_tokens_prompt"`
-	NativeCompletionTokens int     `json:"native_tokens_completion"`
-	FinishReason           string  `json:"finish_reason"`
-	NativeFinishReason     string  `json:"native_finish_reason"`
-	TotalCost              float64 `json:"total_cost"`
+	ID                          string                       `json:"id"`
+	UpstreamID                  string                       `json:"upstream_id,omitempty"`
+	TotalCost                   float64                      `json:"total_cost,omitempty"`
+	CacheDiscount               float64                      `json:"cache_discount,omitempty"`
+	UpstreamInferenceCost       float64                      `json:"upstream_inference_cost,omitempty"`
+	CreatedAt                   string                       `json:"created_at,omitempty"`
+	Model                       string                       `json:"model,omitempty"`
+	AppID                       int                          `json:"app_id,omitempty"`
+	Streamed                    *bool                        `json:"streamed,omitempty"`
+	Cancelled                   *bool                        `json:"cancelled,omitempty"`
+	ProviderName                string                       `json:"provider_name,omitempty"`
+	Latency                     *float64                     `json:"latency,omitempty"`
+	ModerationLatency           *float64                     `json:"moderation_latency,omitempty"`
+	GenerationTime              *float64                     `json:"generation_time,omitempty"`
+	FinishReason                string                       `json:"finish_reason,omitempty"`
+	NativeFinishReason          string                       `json:"native_finish_reason,omitempty"`
+	PromptTokens                int                          `json:"tokens_prompt,omitempty"`
+	CompletionTokens            int                          `json:"tokens_completion,omitempty"`
+	NativePromptTokens          int                          `json:"native_tokens_prompt,omitempty"`
+	NativeCompletionTokens      int                          `json:"native_tokens_completion,omitempty"`
+	NativeCompletionImageTokens int                          `json:"native_tokens_completion_images,omitempty"`
+	NativeReasoningTokens       int                          `json:"native_tokens_reasoning,omitempty"`
+	NativeCachedTokens          int                          `json:"native_tokens_cached,omitempty"`
+	NumMediaPrompt              int                          `json:"num_media_prompt,omitempty"`
+	NumInputAudioPrompt         int                          `json:"num_input_audio_prompt,omitempty"`
+	NumMediaCompletion          int                          `json:"num_media_completion,omitempty"`
+	NumSearchResults            int                          `json:"num_search_results,omitempty"`
+	Origin                      string                       `json:"origin,omitempty"`
+	Usage                       float64                      `json:"usage,omitempty"`
+	IsBYOK                      bool                         `json:"is_byok,omitempty"`
+	ExternalUser                string                       `json:"external_user,omitempty"`
+	APIType                     string                       `json:"api_type,omitempty"`
+	Router                      string                       `json:"router,omitempty"`
+	ProviderResponses           []GenerationProviderResponse `json:"provider_responses,omitempty"`
 }
 
-// GetGeneration retrieves the full generation information for a given ID.
-// This is useful for getting precise token counts and cost for a request.
+type GenerationProviderResponse struct {
+	ID             string   `json:"id,omitempty"`
+	EndpointID     string   `json:"endpoint_id,omitempty"`
+	ModelPermaslug string   `json:"model_permaslug,omitempty"`
+	ProviderName   string   `json:"provider_name,omitempty"`
+	Status         *int     `json:"status,omitempty"`
+	Latency        *float64 `json:"latency,omitempty"`
+	IsBYOK         *bool    `json:"is_byok,omitempty"`
+}
+
 func (c *Client) GetGeneration(ctx context.Context, id string) (*Generation, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, c.config.BaseURL+"/generation?id="+id, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := c.config.HTTPClient.Do(req)
-	if err != nil {
-		return nil, &RequestError{Err: err}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp ErrorResponse
-		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-			return nil, &RequestError{Err: fmt.Errorf("failed to decode error response: %w", err)}
-		}
-		return nil, errResp.Error
-	}
+	query := url.Values{}
+	query.Set("id", id)
 
 	var res GenerationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, &RequestError{Err: fmt.Errorf("failed to decode response: %w", err)}
+	if err := c.doJSON(ctx, http.MethodGet, c.config.BaseURL+"/generation", query, nil, &res); err != nil {
+		return nil, err
 	}
-
 	return &res.Data, nil
 }

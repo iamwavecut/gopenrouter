@@ -23,7 +23,9 @@ While this library maintains a familiar, `go-openai`-style interface, it include
 - **Advanced Routing**: Use `Models` for fallback chains and `Route` for custom routing logic.
 - **Reasoning Parameters**: Control and request "thinking" tokens from supported models using the `Reasoning` parameters.
 - **Provider-Specific `ExtraBody`**: Pass custom, provider-specific parameters through the `ExtraBody` field for fine-grained control.
-- **Client Utilities**: Includes built-in methods to `ListModels`, `CheckCredits`, and `GetGeneration` stats directly from the client.
+- **Broader API Coverage**: Includes chat completions, embeddings, OpenAI-style responses, Anthropic messages, model/provider metadata, key/credit helpers, OAuth, and management endpoints.
+
+For cleaner namespaces, the larger API families are available as dedicated subpackages: `catalog`, `embeddings`, `responses`, `anthropic`, `oauth`, and `management`, with cross-cutting schema types in `shared`. The root package remains as a backward-compatible facade, and its re-exported aliases are deprecated in favor of the symbols from those packages.
 
 ## Installation
 
@@ -49,6 +51,9 @@ For complete, runnable examples, please see the [`examples/`](./examples) direct
 | [Tool Calling (History)](./examples/tool_call_loop)          | End-to-end tool-calling loop with full-history resend and tool result messages.                 |
 | [Logprobs](./examples/logprobs)                              | Request token logprobs and inspect per-token candidates.                                        |
 | [Streaming with Usage](./examples/stream_include_usage)      | Stream responses and receive a final usage chunk before [DONE].                                 |
+| [Embeddings](./examples/embeddings)                          | Creates embeddings with the OpenRouter embeddings API.                                          |
+| [Responses API](./examples/responses)                        | Uses the OpenAI-style `/responses` API with typed client helpers.                               |
+| [Anthropic Messages](./examples/anthropic_messages)          | Calls the Anthropic-compatible `/messages` API through the same client.                         |
 | [List Models](./examples/list_models)                        | A client utility to fetch the list of all models available on OpenRouter.                       |
 | [Check Credits](./examples/check_credits)                    | A client utility to check your API key's usage, limit, and free tier status on OpenRouter.      |
 | [Get Generation](./examples/get_generation)                  | Fetches detailed post-generation statistics, including cost and native token counts.            |

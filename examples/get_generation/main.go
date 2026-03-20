@@ -41,7 +41,7 @@ func main() {
 	// It may take a moment for the generation to be available, so we'll retry a few times.
 	var genResp *gopenrouter.Generation
 	var getErr error
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		genResp, getErr = client.GetGeneration(ctx, chatResp.ID)
 		if getErr == nil {
 			break

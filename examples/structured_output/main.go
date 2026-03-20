@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/iamwavecut/gopenrouter"
+	"github.com/iamwavecut/gopenrouter/shared"
 )
 
 // User struct defines the desired structured output.
@@ -34,9 +35,9 @@ func main() {
 				Content: "My name is John Doe and I am 30 years old.",
 			},
 		},
-		ResponseFormat: &gopenrouter.ResponseFormat{
+		ResponseFormat: &shared.ResponseFormat{
 			Type: "json_schema",
-			JSONSchema: &gopenrouter.JSONSchema{
+			JSONSchema: &shared.JSONSchema{
 				Name:   "extract_user",
 				Strict: true,
 				Schema: schema,

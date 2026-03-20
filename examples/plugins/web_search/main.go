@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/iamwavecut/gopenrouter"
+	"github.com/iamwavecut/gopenrouter/shared"
 )
 
 func main() {
@@ -16,9 +17,9 @@ func main() {
 		Messages: []gopenrouter.ChatCompletionMessage{
 			{Role: gopenrouter.RoleUser, Content: "Find the latest news headlines about Go programming."},
 		},
-		Plugins: []gopenrouter.Plugin{{
-			ID:     gopenrouter.PluginIDWeb,
-			Config: gopenrouter.WebSearchOptions{SearchContextSize: gopenrouter.SearchContextSizeHigh},
+		Plugins: []shared.Plugin{{
+			ID:     shared.PluginIDWeb,
+			Config: shared.WebSearchOptions{SearchContextSize: shared.SearchContextSizeHigh},
 		}},
 	}
 

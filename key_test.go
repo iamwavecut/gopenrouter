@@ -19,14 +19,16 @@ func TestCheckCredits(t *testing.T) {
 	mockRespBody, _ := json.Marshal(mockResponse)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/auth/key" {
-			t.Errorf("expected path /auth/key, got %s", r.URL.Path)
+		if r.URL.Path != "/key" {
+			t.Errorf("expected path /key, got %s", r.URL.Path)
 			http.NotFound(w, r)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(mockRespBody)
+		if _, err := w.Write(mockRespBody); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -69,5 +71,42 @@ func TestCheckCredits_APIError(t *testing.T) {
 
 	if apiErr.Message != errorMsg {
 		t.Errorf("expected error message %q, got %q", errorMsg, apiErr.Message)
+	}
+}
+
+func TestCheckCredits_FallbackToLegacyPath(t *testing.T) {
+	mockKeyData := KeyData{
+		Label: "legacy-key",
+		Limit: 100,
+	}
+	mockResponse := KeyCheckResponse{Data: mockKeyData}
+	mockRespBody, _ := json.Marshal(mockResponse)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/key":
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"error":{"message":"not found"}}`)
+		case "/auth/key":
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := w.Write(mockRespBody); err != nil {
+				t.Fatalf("write legacy response: %v", err)
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	config := DefaultConfig("test-token")
+	config.BaseURL = server.URL
+	client := NewClientWithConfig(config)
+
+	keyData, err := client.CheckCredits(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(*keyData, mockKeyData) {
+		t.Fatalf("response mismatch: got %+v want %+v", *keyData, mockKeyData)
 	}
 }

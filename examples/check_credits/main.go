@@ -6,14 +6,16 @@ import (
 	"os"
 
 	"github.com/iamwavecut/gopenrouter"
+	managementapi "github.com/iamwavecut/gopenrouter/management"
 )
 
 func main() {
 	client := gopenrouter.NewClient(os.Getenv("OPENROUTER_API_KEY"))
+	api := managementapi.New(client)
 
-	keyData, err := client.CheckCredits(context.Background())
+	keyData, err := api.GetCurrentKey(context.Background())
 	if err != nil {
-		fmt.Printf("CheckCredits error: %v\n", err)
+		fmt.Printf("management.GetCurrentKey error: %v\n", err)
 		return
 	}
 

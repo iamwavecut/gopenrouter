@@ -6,15 +6,17 @@ import (
 	"os"
 
 	"github.com/iamwavecut/gopenrouter"
+	catalogapi "github.com/iamwavecut/gopenrouter/catalog"
 )
 
 func main() {
 	client := gopenrouter.NewClient(os.Getenv("OPENROUTER_API_KEY"))
+	api := catalogapi.New(client)
 	ctx := context.Background()
 
-	models, err := client.ListModels(ctx)
+	models, err := api.ListModels(ctx)
 	if err != nil {
-		fmt.Printf("ListModels error: %v\n", err)
+		fmt.Printf("catalog.ListModels error: %v\n", err)
 		return
 	}
 

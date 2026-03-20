@@ -135,7 +135,9 @@ func TestCreateChatCompletion(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(mockRespBody)
+		if _, err := w.Write(mockRespBody); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -235,6 +237,23 @@ func TestChatCompletionMessage_ToolCallsMarshal(t *testing.T) {
 	}
 }
 
+func TestChatCompletionMessage_UnmarshalMultiContent(t *testing.T) {
+	payload := []byte(`{"role":"assistant","content":[{"type":"text","text":"hello"},{"type":"input_audio","input_audio":{"data":"abc","format":"wav"}}]}`)
+	var msg ChatCompletionMessage
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.Content != "" {
+		t.Fatalf("expected string content to be empty, got %q", msg.Content)
+	}
+	if len(msg.MultiContent) != 2 {
+		t.Fatalf("expected 2 content parts, got %d", len(msg.MultiContent))
+	}
+	if msg.MultiContent[1].InputAudio == nil || msg.MultiContent[1].InputAudio.Format != "wav" {
+		t.Fatalf("expected input audio part, got %+v", msg.MultiContent[1])
+	}
+}
+
 func TestChatCompletionRequest_ParallelToolCalls_Marshal(t *testing.T) {
 	parallel := false
 	req := ChatCompletionRequest{
@@ -302,5 +321,33 @@ func TestCreateChatCompletion_NonJSONError(t *testing.T) {
 	}
 	if reqErr.HTTPStatus == "" {
 		t.Errorf("expected HTTPStatus to be set")
+	}
+}
+
+func TestValidateChatCompletionRequest_DeprecatedConflicts(t *testing.T) {
+	maxCompletionTokens := 32
+	err := validateChatCompletionRequest(ChatCompletionRequest{
+		Model:               "test",
+		MaxTokens:           10,
+		MaxCompletionTokens: &maxCompletionTokens,
+	})
+	if err == nil {
+		t.Fatal("expected conflict error for max_tokens and max_completion_tokens")
+	}
+
+	sort := &ProviderSortPreference{
+		Config: &ProviderSortConfig{
+			Partition: ProviderSortPartitionModel,
+		},
+	}
+	err = validateChatCompletionRequest(ChatCompletionRequest{
+		Model: "test",
+		Route: "fallback",
+		Provider: &ProviderPreferences{
+			Sort: sort,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected conflict error for route and provider.sort.partition")
 	}
 }

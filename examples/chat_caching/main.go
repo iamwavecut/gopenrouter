@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/iamwavecut/gopenrouter"
+	"github.com/iamwavecut/gopenrouter/shared"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func main() {
 					{
 						Type: "text",
 						Text: hugeTextBody,
-						CacheControl: &gopenrouter.CacheControl{
+						CacheControl: &shared.CacheControl{
 							Type: "ephemeral",
 						},
 					},
@@ -76,7 +77,7 @@ func main() {
 					{
 						Type: "text",
 						Text: hugeTextBody,
-						CacheControl: &gopenrouter.CacheControl{
+						CacheControl: &shared.CacheControl{
 							Type: "ephemeral",
 						},
 					},

@@ -2,61 +2,42 @@ package gopenrouter
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
+	"net/url"
 )
 
-// ModelsList is a response from the /models endpoint.
-type ModelsList struct {
-	Data []Model `json:"data"`
-}
-
-// Model represents a single model from the /models endpoint.
-// The schema is inferred from common API patterns.
-type Model struct {
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Description  string  `json:"description"`
-	ContextSize  int     `json:"context_length"`
-	Architecture any     `json:"architecture"`
-	TopProvider  any     `json:"top_provider"`
-	Pricing      Pricing `json:"pricing"`
-}
-
-// Pricing represents the pricing information for a model.
-type Pricing struct {
-	Prompt     string `json:"prompt"`
-	Completion string `json:"completion"`
-	Request    string `json:"request"`
-	Image      string `json:"image"`
-}
-
-// ListModels retrieves the list of available models from OpenRouter.
 func (c *Client) ListModels(ctx context.Context) (*ModelsList, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, c.config.BaseURL+"/models", nil)
-	if err != nil {
-		return nil, err
-	}
+	return c.ListModelsWithParams(ctx, ModelsListParams{})
+}
 
-	resp, err := c.config.HTTPClient.Do(req)
-	if err != nil {
-		return nil, &RequestError{Err: err}
+func (c *Client) ListModelsWithParams(ctx context.Context, params ModelsListParams) (*ModelsList, error) {
+	query := url.Values{}
+	if params.Category != "" {
+		query.Set("category", params.Category)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp ErrorResponse
-		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-			return nil, &RequestError{Err: fmt.Errorf("failed to decode error response: %w", err)}
-		}
-		return nil, errResp.Error
+	if params.SupportedParameters != "" {
+		query.Set("supported_parameters", params.SupportedParameters)
 	}
 
 	var res ModelsList
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, &RequestError{Err: fmt.Errorf("failed to decode response: %w", err)}
+	if err := c.doJSON(ctx, http.MethodGet, c.config.BaseURL+"/models", query, nil, &res); err != nil {
+		return nil, err
 	}
+	return &res, nil
+}
 
+func (c *Client) CountModels(ctx context.Context) (int, error) {
+	var res ModelsCountResponse
+	if err := c.doJSON(ctx, http.MethodGet, c.config.BaseURL+"/models/count", nil, nil, &res); err != nil {
+		return 0, err
+	}
+	return res.Data.Count, nil
+}
+
+func (c *Client) ListModelsForUser(ctx context.Context) (*ModelsList, error) {
+	var res ModelsList
+	if err := c.doJSON(ctx, http.MethodGet, c.config.BaseURL+"/models/user", nil, nil, &res); err != nil {
+		return nil, err
+	}
 	return &res, nil
 }

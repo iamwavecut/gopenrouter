@@ -10,7 +10,7 @@ import (
 // It uses reflection to generate a JSON schema from the struct's fields and tags.
 func GenerateSchema(v any) (map[string]any, error) {
 	t := reflect.TypeOf(v)
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	if t.Kind() != reflect.Struct {

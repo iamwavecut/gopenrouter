@@ -1,9 +1,11 @@
 package gopenrouter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 )
 
@@ -12,55 +14,60 @@ const (
 	RoleAssistant = "assistant"
 	RoleSystem    = "system"
 	RoleTool      = "tool"
+	RoleDeveloper = "developer"
 )
 
 type ChatCompletionMessageRole string
 
-// ChatCompletionRequest is a request to create a chat completion.
 type ChatCompletionRequest struct {
-	Model             string                  `json:"model"`
-	Messages          []ChatCompletionMessage `json:"messages,omitempty"`
-	Temperature       float64                 `json:"temperature,omitempty"`
-	TopP              float64                 `json:"top_p,omitempty"`
-	N                 int                     `json:"n,omitempty"`
-	Stream            bool                    `json:"stream,omitempty"`
-	StreamOptions     *StreamOptions          `json:"stream_options,omitempty"`
-	Stop              []string                `json:"stop,omitempty"`
-	MaxTokens         int                     `json:"max_tokens,omitempty"`
-	PresencePenalty   float64                 `json:"presence_penalty,omitempty"`
-	FrequencyPenalty  float64                 `json:"frequency_penalty,omitempty"`
-	LogitBias         map[string]int          `json:"logit_bias,omitempty"`
-	User              string                  `json:"user,omitempty"`
-	Seed              *int                    `json:"seed,omitempty"`
-	Tools             []Tool                  `json:"tools,omitempty"`
-	ToolChoice        any                     `json:"tool_choice,omitempty"`
-	LogProbs          *bool                   `json:"logprobs,omitempty"`
-	ResponseFormat    *ResponseFormat         `json:"response_format,omitempty"`
-	TopK              *float64                `json:"top_k,omitempty"`
-	RepetitionPenalty *float64                `json:"repetition_penalty,omitempty"`
-	TopLogProbs       *int                    `json:"top_logprobs,omitempty"`
-	MinP              *float64                `json:"min_p,omitempty"`
-	TopA              *float64                `json:"top_a,omitempty"`
-	Prediction        *Prediction             `json:"prediction,omitempty"`
+	Model         string                  `json:"model,omitempty"`
+	Messages      []ChatCompletionMessage `json:"messages,omitempty"`
+	Temperature   float64                 `json:"temperature,omitempty"`
+	TopP          float64                 `json:"top_p,omitempty"`
+	N             int                     `json:"n,omitempty"`
+	Stream        bool                    `json:"stream,omitempty"`
+	StreamOptions *StreamOptions          `json:"stream_options,omitempty"`
+	Stop          []string                `json:"stop,omitempty"`
+	// Deprecated: use MaxCompletionTokens instead.
+	MaxTokens           int             `json:"max_tokens,omitempty"`
+	MaxCompletionTokens *int            `json:"max_completion_tokens,omitempty"`
+	PresencePenalty     float64         `json:"presence_penalty,omitempty"`
+	FrequencyPenalty    float64         `json:"frequency_penalty,omitempty"`
+	LogitBias           map[string]int  `json:"logit_bias,omitempty"`
+	User                string          `json:"user,omitempty"`
+	Seed                *int            `json:"seed,omitempty"`
+	Tools               []Tool          `json:"tools,omitempty"`
+	ToolChoice          any             `json:"tool_choice,omitempty"`
+	LogProbs            *bool           `json:"logprobs,omitempty"`
+	ResponseFormat      *ResponseFormat `json:"response_format,omitempty"`
+	TopK                *float64        `json:"top_k,omitempty"`
+	RepetitionPenalty   *float64        `json:"repetition_penalty,omitempty"`
+	TopLogProbs         *int            `json:"top_logprobs,omitempty"`
+	MinP                *float64        `json:"min_p,omitempty"`
+	TopA                *float64        `json:"top_a,omitempty"`
+	Prediction          *Prediction     `json:"prediction,omitempty"`
 
-	// OpenRouter-specific fields
-	Models     []string         `json:"models,omitempty"`
-	Route      string           `json:"route,omitempty"`
-	Transforms []string         `json:"transforms,omitempty"`
-	Reasoning  *ReasoningParams `json:"reasoning,omitempty"`
-	Usage      *UsageParams     `json:"usage,omitempty"`
-	ExtraBody  map[string]any   `json:"-"`
-	Plugins    []Plugin         `json:"plugins,omitempty"`
-	// Tool calling behavior
-	ParallelToolCalls *bool `json:"parallel_tool_calls,omitempty"`
+	Models []string `json:"models,omitempty"`
+	// Deprecated: use Provider.Sort.Config.Partition instead.
+	Route             string               `json:"route,omitempty"`
+	Transforms        []string             `json:"transforms,omitempty"`
+	Reasoning         *ReasoningParams     `json:"reasoning,omitempty"`
+	Usage             *UsageParams         `json:"usage,omitempty"`
+	ExtraBody         map[string]any       `json:"-"`
+	Plugins           []Plugin             `json:"plugins,omitempty"`
+	ParallelToolCalls *bool                `json:"parallel_tool_calls,omitempty"`
+	Provider          *ProviderPreferences `json:"provider,omitempty"`
+	Metadata          map[string]string    `json:"metadata,omitempty"`
+	Modalities        []string             `json:"modalities,omitempty"`
+	ImageConfig       map[string]any       `json:"image_config,omitempty"`
+	SessionID         string               `json:"session_id,omitempty"`
+	Trace             *TraceMetadata       `json:"trace,omitempty"`
+	Debug             *DebugOptions        `json:"debug,omitempty"`
 }
 
-// chatCompletionRequest is an alias for ChatCompletionRequest to avoid recursion in MarshalJSON.
 type chatCompletionRequest ChatCompletionRequest
 
-// MarshalJSON implements json.Marshaler.
 func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
-	// Use an alias to avoid recursive call to MarshalJSON
 	b, err := json.Marshal(chatCompletionRequest(r))
 	if err != nil {
 		return nil, err
@@ -70,45 +77,58 @@ func (r ChatCompletionRequest) MarshalJSON() ([]byte, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, err
 	}
-
-	// Merge ExtraBody
-	for k, v := range r.ExtraBody {
-		m[k] = v
-	}
-
+	maps.Copy(m, r.ExtraBody)
 	return json.Marshal(m)
 }
 
-// ReasoningParams specifies parameters for reasoning token generation.
-// One of MaxTokens or Effort should be specified.
+type ReasoningEffort string
+
+const (
+	ReasoningEffortXHigh   ReasoningEffort = "xhigh"
+	ReasoningEffortHigh    ReasoningEffort = "high"
+	ReasoningEffortMedium  ReasoningEffort = "medium"
+	ReasoningEffortLow     ReasoningEffort = "low"
+	ReasoningEffortMinimal ReasoningEffort = "minimal"
+	ReasoningEffortNone    ReasoningEffort = "none"
+)
+
+type ReasoningSummaryVerbosity string
+
+const (
+	ReasoningSummaryAuto     ReasoningSummaryVerbosity = "auto"
+	ReasoningSummaryConcise  ReasoningSummaryVerbosity = "concise"
+	ReasoningSummaryDetailed ReasoningSummaryVerbosity = "detailed"
+)
+
 type ReasoningParams struct {
-	Exclude   bool   `json:"exclude,omitempty"`
-	MaxTokens int    `json:"max_tokens,omitempty"`
-	Effort    string `json:"effort,omitempty"` // Can be "high", "medium", "low"
+	Effort  ReasoningEffort           `json:"effort,omitempty"`
+	Summary ReasoningSummaryVerbosity `json:"summary,omitempty"`
+	// Deprecated: retained only as a legacy compatibility field.
+	Exclude bool `json:"exclude,omitempty"`
+	// Deprecated: retained only as a legacy compatibility field.
+	MaxTokens int `json:"max_tokens,omitempty"`
 }
 
-// UsageParams is for OpenRouter's usage accounting feature.
 type UsageParams struct {
 	Include bool `json:"include"`
 }
 
-// ChatCompletionMessage is a message in a chat completion request.
 type ChatCompletionMessage struct {
 	Role         ChatCompletionMessageRole   `json:"role"`
 	Content      string                      `json:"content,omitempty"`
-	MultiContent []ChatCompletionMessagePart `json:"-"` // Will be marshalled to content
+	MultiContent []ChatCompletionMessagePart `json:"-"`
 
 	Name       string     `json:"name,omitempty"`
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Refusal    string     `json:"refusal,omitempty"`
 
-	// For response messages
 	Reasoning        string            `json:"reasoning,omitempty"`
 	ReasoningDetails []ReasoningDetail `json:"reasoning_details,omitempty"`
+	Images           []GeneratedImage  `json:"images,omitempty"`
 }
 
-// MarshalJSON handles marshalling the Content or MultiContent field.
-func (m *ChatCompletionMessage) MarshalJSON() ([]byte, error) {
+func (m ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 	data := map[string]any{
 		"role": m.Role,
 	}
@@ -118,7 +138,6 @@ func (m *ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 	} else if m.Content != "" {
 		data["content"] = m.Content
 	}
-
 	if m.Name != "" {
 		data["name"] = m.Name
 	}
@@ -128,66 +147,79 @@ func (m *ChatCompletionMessage) MarshalJSON() ([]byte, error) {
 	if m.ToolCallID != "" {
 		data["tool_call_id"] = m.ToolCallID
 	}
-
+	if m.Refusal != "" {
+		data["refusal"] = m.Refusal
+	}
+	if m.Reasoning != "" {
+		data["reasoning"] = m.Reasoning
+	}
+	if len(m.ReasoningDetails) > 0 {
+		data["reasoning_details"] = m.ReasoningDetails
+	}
+	if len(m.Images) > 0 {
+		data["images"] = m.Images
+	}
 	return json.Marshal(data)
 }
 
-// ChatCompletionMessagePart is a part of a multi-part message.
+func (m *ChatCompletionMessage) UnmarshalJSON(data []byte) error {
+	type alias ChatCompletionMessage
+	var raw struct {
+		alias
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*m = ChatCompletionMessage(raw.alias)
+	raw.Content = bytes.TrimSpace(raw.Content)
+	switch {
+	case len(raw.Content) == 0, string(raw.Content) == "null":
+		m.Content = ""
+		m.MultiContent = nil
+	case raw.Content[0] == '[':
+		var parts []ChatCompletionMessagePart
+		if err := json.Unmarshal(raw.Content, &parts); err != nil {
+			return err
+		}
+		m.MultiContent = parts
+		m.Content = ""
+	default:
+		if err := json.Unmarshal(raw.Content, &m.Content); err != nil {
+			return err
+		}
+		m.MultiContent = nil
+	}
+	return nil
+}
+
 type ChatCompletionMessagePart struct {
 	Type         string        `json:"type"`
 	Text         string        `json:"text,omitempty"`
 	ImageURL     *ImageURL     `json:"image_url,omitempty"`
-	File         *File         `json:"file,omitempty"` // OpenRouter specific
+	File         *File         `json:"file,omitempty"`
+	InputAudio   *InputAudio   `json:"input_audio,omitempty"`
+	VideoURL     *VideoInput   `json:"video_url,omitempty"`
 	CacheControl *CacheControl `json:"cache_control,omitempty"`
 }
 
-// CacheControl is for controlling caching of message parts.
-type CacheControl struct {
-	Type string `json:"type"` // e.g. "ephemeral"
-}
-
-// ImageURL is the URL of an image.
-type ImageURL struct {
-	URL string `json:"url"`
-}
-
-// File is a file attachment. OpenRouter specific.
-type File struct {
-	Filename string `json:"filename"`
-	FileData string `json:"file_data"` // base64 encoded
-}
-
-// ResponseFormat is the format of the response.
-type ResponseFormat struct {
-	Type       string      `json:"type"`
-	JSONSchema *JSONSchema `json:"json_schema,omitempty"`
-}
-
-// JSONSchema is the schema for the JSON response format.
-type JSONSchema struct {
-	Name   string `json:"name"`
-	Strict bool   `json:"strict"`
-	Schema any    `json:"schema"`
-}
-
-// Provider is the provider information.
-type Provider struct{}
-
-// Tool is a tool the model can use.
 type Tool struct {
 	Type     string   `json:"type"`
 	Function Function `json:"function"`
 }
 
-// Function is a function the model can call.
 type Function struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Parameters  any    `json:"parameters,omitempty"`
-	Arguments   string `json:"arguments,omitempty"` // For tool call responses
+	Arguments   string `json:"arguments,omitempty"`
 }
 
-// ChatCompletionResponse is a response to a chat completion request.
+type Prediction struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
 type ChatCompletionResponse struct {
 	ID                string   `json:"id"`
 	Object            string   `json:"object"`
@@ -198,7 +230,6 @@ type ChatCompletionResponse struct {
 	SystemFingerprint string   `json:"system_fingerprint,omitempty"`
 }
 
-// Choice is a choice in a chat completion response.
 type Choice struct {
 	Index              int                           `json:"index"`
 	Message            ChatCompletionMessage         `json:"message"`
@@ -207,29 +238,44 @@ type Choice struct {
 	Logprobs           *ChatCompletionChoiceLogprobs `json:"logprobs,omitempty"`
 }
 
-// Usage is the usage of the model.
 type Usage struct {
 	PromptTokens            int            `json:"prompt_tokens"`
 	CompletionTokens        int            `json:"completion_tokens"`
 	TotalTokens             int            `json:"total_tokens"`
 	Cost                    float64        `json:"cost,omitempty"`
+	IsBYOK                  *bool          `json:"is_byok,omitempty"`
+	ImageTokens             int            `json:"image_tokens,omitempty"`
+	CostDetails             *CostDetails   `json:"cost_details,omitempty"`
+	ServerToolUse           *ServerToolUse `json:"server_tool_use,omitempty"`
 	PromptTokensDetails     *TokensDetails `json:"prompt_tokens_details,omitempty"`
 	CompletionTokensDetails *TokensDetails `json:"completion_tokens_details,omitempty"`
 }
 
-// TokensDetails provides more detail on token usage.
-type TokensDetails struct {
-	CachedTokens    int `json:"cached_tokens,omitempty"`
-	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+type CostDetails struct {
+	UpstreamInferenceCost       float64 `json:"upstream_inference_cost,omitempty"`
+	UpstreamInferenceInputCost  float64 `json:"upstream_inference_input_cost,omitempty"`
+	UpstreamInferenceOutputCost float64 `json:"upstream_inference_output_cost,omitempty"`
 }
 
-// ChatCompletionChoiceLogprobs contains token-level logprob information for non-stream responses.
+type ServerToolUse struct {
+	WebSearchRequests int `json:"web_search_requests,omitempty"`
+}
+
+type TokensDetails struct {
+	CachedTokens             int `json:"cached_tokens,omitempty"`
+	CacheWriteTokens         int `json:"cache_write_tokens,omitempty"`
+	ReasoningTokens          int `json:"reasoning_tokens,omitempty"`
+	AudioTokens              int `json:"audio_tokens,omitempty"`
+	VideoTokens              int `json:"video_tokens,omitempty"`
+	AcceptedPredictionTokens int `json:"accepted_prediction_tokens,omitempty"`
+	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
+}
+
 type ChatCompletionChoiceLogprobs struct {
 	Content []ChatCompletionTokenLogprob `json:"content,omitempty"`
 	Refusal []ChatCompletionTokenLogprob `json:"refusal,omitempty"`
 }
 
-// ChatCompletionTokenLogprob represents a single token and logprob details.
 type ChatCompletionTokenLogprob struct {
 	Token       string                                 `json:"token"`
 	LogProb     float64                                `json:"logprob"`
@@ -237,127 +283,78 @@ type ChatCompletionTokenLogprob struct {
 	TopLogProbs []ChatCompletionTokenLogprobTopLogprob `json:"top_logprobs,omitempty"`
 }
 
-// ChatCompletionTokenLogprobTopLogprob represents an alternative token candidate.
 type ChatCompletionTokenLogprobTopLogprob struct {
 	Token   string  `json:"token"`
 	LogProb float64 `json:"logprob"`
 	Bytes   []byte  `json:"bytes,omitempty"`
 }
 
-// ReasoningDetail is a detail about the reasoning process.
 type ReasoningDetail struct {
 	Type      string `json:"type"`
 	Summary   string `json:"summary,omitempty"`
-	Encrypted string `json:"encrypted,omitempty"`
+	Data      string `json:"data,omitempty"`
 	Text      string `json:"text,omitempty"`
 	Signature string `json:"signature,omitempty"`
+	ID        string `json:"id,omitempty"`
+	Format    string `json:"format,omitempty"`
+	Index     *int   `json:"index,omitempty"`
+
+	Encrypted string `json:"-"`
 }
 
-// ToolCall is a call to a tool.
+func (r ReasoningDetail) MarshalJSON() ([]byte, error) {
+	type alias ReasoningDetail
+	if r.Data == "" && r.Encrypted != "" {
+		r.Data = r.Encrypted
+	}
+	return json.Marshal(alias(r))
+}
+
+func (r *ReasoningDetail) UnmarshalJSON(data []byte) error {
+	type alias ReasoningDetail
+	var decoded alias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*r = ReasoningDetail(decoded)
+	if r.Data != "" {
+		r.Encrypted = r.Data
+	}
+	return nil
+}
+
 type ToolCall struct {
 	Index    int      `json:"index,omitempty"`
 	ID       string   `json:"id,omitempty"`
 	Type     string   `json:"type,omitempty"`
-	Function Function `json:"function,omitempty"`
+	Function Function `json:"function"`
 }
 
-// Prediction is the predicted output for latency optimization.
-type Prediction struct {
-	Type    string `json:"type"`
-	Content string `json:"content"`
-}
-
-// StreamOptions provides additional control for streaming responses.
 type StreamOptions struct {
-	// If set, an extra chunk will be sent before the [DONE] message with aggregated usage.
 	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
-// Plugin represents an OpenRouter plugin request entry (e.g., web search, file parser).
-type Plugin struct {
-	ID     PluginID `json:"id"`
-	Config any      `json:"config,omitempty"`
-}
-
-type PluginID string
-
-const (
-	PluginIDFileParser PluginID = "file-parser"
-	PluginIDWeb        PluginID = "web"
-)
-
-// PDFEngine enumerates available PDF processing engines.
-type PDFEngine string
-
-const (
-	PDFEngineMistralOCR PDFEngine = "mistral-ocr"
-	PDFEnginePDFText    PDFEngine = "pdf-text"
-	PDFEngineNative     PDFEngine = "native"
-)
-
-// PDFPlugin config for file-parser PDF processing.
-type PDFPlugin struct {
-	Engine string `json:"engine"`
-}
-
-// FileParserConfig configures the file-parser plugin.
-type FileParserConfig struct {
-	PDF *PDFPlugin `json:"pdf,omitempty"`
-}
-
-// WebSearchOptions config for the web search plugin.
-type WebSearchOptions struct {
-	SearchContextSize SearchContextSize `json:"search_context_size"`
-}
-
-type SearchContextSize string
-
-const (
-	SearchContextSizeLow    SearchContextSize = "low"
-	SearchContextSizeMedium SearchContextSize = "medium"
-	SearchContextSizeHigh   SearchContextSize = "high"
-)
-
-// CreateChatCompletion creates a chat completion.
 func (c *Client) CreateChatCompletion(ctx context.Context, r ChatCompletionRequest) (*ChatCompletionResponse, error) {
 	if err := validateChatCompletionRequest(r); err != nil {
 		return nil, err
 	}
-
 	if r.Stream {
 		return nil, &RequestError{Err: fmt.Errorf("use CreateChatCompletionStream for streaming requests")}
 	}
 
-	req, err := c.newRequest(ctx, http.MethodPost, c.config.BaseURL+"/chat/completions", r)
-	if err != nil {
+	var res ChatCompletionResponse
+	if err := c.doJSON(ctx, http.MethodPost, c.config.BaseURL+"/chat/completions", nil, r, &res); err != nil {
 		return nil, err
 	}
-
-	resp, err := c.config.HTTPClient.Do(req)
-	if err != nil {
-		return nil, &RequestError{Err: err}
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		var errResp ErrorResponse
-		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-			return nil, &RequestError{HTTPStatus: resp.Status, HTTPStatusCode: resp.StatusCode, Err: fmt.Errorf("failed to decode error response: %w", err)}
-		}
-		return nil, errResp.Error
-	}
-
-	var res ChatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, &RequestError{HTTPStatus: resp.Status, HTTPStatusCode: resp.StatusCode, Err: fmt.Errorf("failed to decode response: %w", err)}
-	}
-
 	return &res, nil
 }
 
 func validateChatCompletionRequest(r ChatCompletionRequest) error {
-	if r.Reasoning != nil && r.Reasoning.MaxTokens > 0 && r.Reasoning.Effort != "" {
-		return &RequestError{Err: fmt.Errorf("only one of 'reasoning.effort' and 'reasoning.max_tokens' can be specified")}
+	if r.MaxTokens > 0 && r.MaxCompletionTokens != nil && *r.MaxCompletionTokens > 0 {
+		return &RequestError{Err: fmt.Errorf("only one of 'max_tokens' and 'max_completion_tokens' can be specified")}
+	}
+	if r.Route != "" && r.Provider != nil && r.Provider.Sort != nil && r.Provider.Sort.Config != nil && r.Provider.Sort.Config.Partition != "" {
+		return &RequestError{Err: fmt.Errorf("only one of 'route' and 'provider.sort.partition' can be specified")}
 	}
 	return nil
 }

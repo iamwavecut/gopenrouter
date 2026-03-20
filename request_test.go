@@ -2,8 +2,7 @@ package gopenrouter
 
 import (
 	"context"
-	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"reflect"
 	"testing"
@@ -50,17 +49,20 @@ func TestNewRequest(t *testing.T) {
 		{
 			name: "Request with site URL and name",
 			clientConfig: ClientConfig{
-				AuthToken: "test-token",
-				SiteURL:   "https://my-site.com",
-				SiteName:  "My Site",
+				AuthToken:      "test-token",
+				SiteURL:        "https://my-site.com",
+				SiteName:       "My Site",
+				SiteCategories: []string{"productivity", "coding"},
 			},
 			method:  http.MethodPost,
 			url:     "https://example.com/test",
 			payload: nil,
 			expectedHeaders: http.Header{
-				"Authorization": {"Bearer test-token"},
-				"Http-Referer":  {"https://my-site.com"},
-				"X-Title":       {"My Site"},
+				"Authorization":           {"Bearer test-token"},
+				"Http-Referer":            {"https://my-site.com"},
+				"X-Openrouter-Title":      {"My Site"},
+				"X-Title":                 {"My Site"},
+				"X-Openrouter-Categories": {"productivity,coding"},
 			},
 			expectedBody: "",
 		},
@@ -108,8 +110,13 @@ func TestNewRequest(t *testing.T) {
 			}
 
 			if req.Body != nil {
-				bodyBytes, _ := ioutil.ReadAll(req.Body)
-				req.Body.Close()
+				bodyBytes, err := io.ReadAll(req.Body)
+				if err != nil {
+					t.Fatalf("read body: %v", err)
+				}
+				if err := req.Body.Close(); err != nil {
+					t.Fatalf("close body: %v", err)
+				}
 				if string(bodyBytes) != tc.expectedBody {
 					t.Errorf("expected body %q, got %q", tc.expectedBody, string(bodyBytes))
 				}
@@ -118,19 +125,4 @@ func TestNewRequest(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Custom unmarshaling for testing to handle nil error case
-func (e *RequestError) UnmarshalJSON(data []byte) error {
-	var errWrapper struct {
-		Err json.RawMessage `json:"err"`
-	}
-	if err := json.Unmarshal(data, &errWrapper); err != nil {
-		return err
-	}
-	if string(errWrapper.Err) == "null" {
-		e.Err = nil
-		return nil
-	}
-	return json.Unmarshal(errWrapper.Err, &e.Err)
 }

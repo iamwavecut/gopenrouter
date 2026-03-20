@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/iamwavecut/gopenrouter"
+	"github.com/iamwavecut/gopenrouter/shared"
 )
 
 // A tiny 1x1 red pixel PNG as a base64 string.
@@ -26,7 +27,7 @@ func main() {
 					},
 					{
 						Type: "image_url",
-						ImageURL: &gopenrouter.ImageURL{
+						ImageURL: &shared.ImageURL{
 							URL: "data:image/png;base64," + redPixelBase64,
 						},
 					},

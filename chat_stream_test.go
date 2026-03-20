@@ -28,7 +28,9 @@ func TestCreateChatCompletionStream(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
-		w.Write([]byte("data: {}\n\n"))
+		if _, err := w.Write([]byte("data: {}\n\n")); err != nil {
+			t.Fatalf("write stream response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -95,7 +97,9 @@ func TestChatCompletionStream_Recv(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		io.WriteString(w, sb.String())
+		if _, err := io.WriteString(w, sb.String()); err != nil {
+			t.Fatalf("write mock stream: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -109,7 +113,7 @@ func TestChatCompletionStream_Recv(t *testing.T) {
 	}
 	defer stream.Close()
 
-	for i := 0; i < len(mockResponses); i++ {
+	for i := range mockResponses {
 		resp, err := stream.Recv()
 		if err != nil {
 			t.Fatalf("Recv() error: %v", err)
@@ -135,7 +139,9 @@ func TestCreateChatCompletionStream_IncludeUsageRequested(t *testing.T) {
 			t.Errorf("expected stream_options.include_usage=true, got: %v", reqBody["stream_options"])
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
-		w.Write([]byte("data: {}\n\n"))
+		if _, err := w.Write([]byte("data: {}\n\n")); err != nil {
+			t.Fatalf("write include usage stream response: %v", err)
+		}
 	}))
 	defer server.Close()
 

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/iamwavecut/gopenrouter"
+	"github.com/iamwavecut/gopenrouter/shared"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func main() {
 					},
 					{
 						Type: "file",
-						File: &gopenrouter.File{
+						File: &shared.File{
 							Filename: "summary.pdf",
 							FileData: "data:application/pdf;base64," + encodedFile,
 						},

@@ -8,12 +8,14 @@ const (
 
 // ClientConfig is a configuration of a client.
 type ClientConfig struct {
-	AuthToken  string
-	BaseURL    string
-	OrgID      string
-	HTTPClient *http.Client
-	SiteURL    string // The URL of your app or site.
-	SiteName   string // The name of your app or site.
+	AuthToken string
+	BaseURL   string
+	// Deprecated: this field is kept only for backward compatibility and is not sent, because the current public OpenRouter API does not define an organization header.
+	OrgID          string
+	HTTPClient     *http.Client
+	SiteURL        string
+	SiteName       string
+	SiteCategories []string
 
 	// Deprecated: use AuthToken instead.
 	APIKey string

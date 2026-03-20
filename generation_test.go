@@ -29,7 +29,9 @@ func TestGetGeneration(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(mockRespBody)
+		if _, err := w.Write(mockRespBody); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer server.Close()
 
